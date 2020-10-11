@@ -1,0 +1,496 @@
+---
+title: "Top Big Data stocks performance"
+author: "Elior Bliah"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    always_allow_html: yes
+    highlight: tango
+    theme: flatly
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+
+```{r include=FALSE}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, quantmod,tidyquant,tibbletime,knitr,webshot, timetk, broom, simfinR, memoise,scales,kableExtra)
+```
+
+
+```{r include=FALSE}
+tickers <- c("AYX","TTD","DDOG","MDB","FSLY")
+
+prices <- tq_get(tickers,
+                 from = "2018-01-01",
+                 to = now(),
+                 get = "stock.prices") %>%
+  group_by(symbol)
+
+
+prices$symbol[prices$symbol == "AYX"] <- "Alteryx"
+prices$symbol[prices$symbol == "TTD"] <- "The Trade Dest"
+prices$symbol[prices$symbol == "DDOG"] <- "Datadog"
+prices$symbol[prices$symbol == "MDB"] <- "MongoDB"
+prices$symbol[prices$symbol == "FSLY"] <- "Fastly"
+
+```
+
+# Stocks Analysis
+
+## Daily Stock Prices
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+prices$date<-as.Date(prices$date,format="%Y-%m-%d")
+
+prices %>%
+  ggplot(aes(x = date, y = adjusted, color = symbol)) +
+  geom_line(size = 0.5) +
+  labs( x = "", y = "Adjusted Prices", color = "", size = 0.5) +
+  facet_wrap(~ symbol, ncol = 2, scales = "free_y") +
+  scale_y_continuous(labels = scales::dollar) +
+  theme_tq() + 
+  scale_color_tq()
+```
+
+## Drill down to COVID-19 period
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+prices %>%
+ subset(date > "2020-02-01") %>%
+  ggplot(aes(x = date, y = adjusted, color = symbol)) +
+  geom_line(size = 0.5) +
+  labs( x = "", y = "Adjusted Prices", color = "", size = 0.5) +
+  facet_wrap(~ symbol, ncol = 2, scales = "free_y") +
+  scale_y_continuous(labels = scales::dollar) +
+  theme_tq() + 
+  scale_color_tq()
+```
+
+
+
+## As an index (=100)
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+prices %>%
+  tq_transmute(adjusted, 
+               periodReturn, 
+               period = "daily", 
+               type = "log", 
+               col_rename = "returns") %>%
+  mutate(wealth.index = 100 * cumprod(1 + returns)) %>%
+  ggplot(aes(x = date, y = wealth.index, color = symbol)) +
+  geom_line(size = 1) +
+  theme_tq() + 
+  scale_color_tq()
+```
+
+
+## Daily Log Returns
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+prices_log_return <- prices %>%
+  group_by(symbol) %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = periodReturn, 
+               period     = "daily", 
+               type       = "log",
+               col_rename = "monthly.returns")
+
+prices_log_return %>%
+  ggplot(aes(x = monthly.returns, fill = symbol)) +
+  geom_density(alpha = 0.5) +
+  labs( x = "Monthly Returns", y = "Density") +
+  theme_tq() +
+  scale_fill_tq() + 
+  facet_wrap(~ symbol, ncol = 2)
+```
+
+
+
+## Min/Max Price By Quarter
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+stock_max_by_q <- prices %>%
+  group_by(symbol) %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = apply.quarterly, 
+               FUN        = max, 
+               col_rename = "max.close") %>%
+  mutate(year.qtr = paste0(year(date), "-Q", quarter(date))) %>%
+  select(-date)
+
+
+stock_min_by_q <- prices %>%
+  group_by(symbol) %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = apply.quarterly, 
+               FUN        = min, 
+               col_rename = "min.close") %>%
+  mutate(year.qtr = paste0(year(date), "-Q", quarter(date))) %>%
+  select(-date)
+
+stock_by_q <- left_join(stock_max_by_q, stock_min_by_q,
+                         by = c("symbol"   = "symbol",
+                                "year.qtr" = "year.qtr"))
+
+
+stock_by_q %>%
+  ggplot(aes(x = year.qtr, color = symbol)) +
+  geom_segment(aes(xend = year.qtr, y = min.close, yend = max.close),
+               size = 1) +
+  geom_point(aes(y = max.close), size = 2) +
+  geom_point(aes(y = min.close), size = 2) +
+  facet_wrap(~ symbol, ncol = 2, scale = "free_y") +
+  labs(y = "Stock Price", color = "") +
+  theme_tq() +
+  scale_color_tq() +
+  scale_y_continuous(labels = scales::dollar) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.title.x = element_blank())
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+prices1 <- 
+  getSymbols(tickers, src = 'yahoo', 
+             from = "2018-01-01",
+             to = now(),
+             auto.assign = TRUE, warnings = FALSE, "getSymbols.warning4.0" =FALSE) %>% 
+  map(~Ad(get(.))) %>%
+  reduce(merge) %>% 
+  `colnames<-`(tickers)
+
+prices_monthly <- to.monthly(prices1, indexAt = "last", OHLC = FALSE)
+
+asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
+```
+
+
+# Sharp Ratio
+
+The sharp ratio was calculated from 2018 on monthly basis
+
+\[ Sharp Ratio = \frac{R_i + r_f}{\sigma_i} \] 
+
+where \[r_f = 0.15\% \] according to  U.S. [T-bills for one year]('https://www.treasury.gov/resource-center/data-chart-center/interest-rates/pages/textview.aspx?data=yield')  
+
+```{r echo=FALSE, results= 'asis'}
+sharpe_ratio <- round(SharpeRatio(asset_returns_xts, Rf = .00015), 2)
+
+sharpe_ratio %>%
+   kable() %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+
+# CAPM β and α
+
+
+Just as a reminder, the formula of the Capital Asset Pricing Model (CAPM) is as the following:
+
+\[\quad\textrm{Expected returns}  = \alpha +\beta(r_m - r_f) +\epsilon    \]
+
+The β is a measurement of its volatility of returns relative to the entire market.
+The beta coefficient can be interpreted as follows:
+
+β =1 exactly as volatile as the market
+
+β >1 more volatile than the market
+
+β <1>0 less volatile than the market
+
+β =0 uncorrelated to the market
+
+β <0 negatively correlated to the market
+
+"Alpha" is a term used in investing to describe a strategy's ability to beat the market, or it's "edge." Alpha is thus also often referred to as “excess return” or “abnormal rate of return,” which refers to the idea that markets are efficient, and so there is no way to systematically earn returns that exceed the broad market as a whole.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+asset_returns_long <-  
+  prices1 %>% 
+  to.monthly(indexAt = "last", OHLC = FALSE) %>% 
+  tk_tbl(preserve_index = TRUE, rename_index = "date") %>%
+  gather(asset, returns, -date) %>% 
+  group_by(asset) %>%  
+  mutate(returns = (log(returns) - log(lag(returns)))) %>% 
+  na.omit()
+
+finx_monthly_xts <- 
+  getSymbols("SPY", 
+             src = 'yahoo', 
+             from = "2017-01-01", 
+             to = now(),
+             auto.assign = TRUE, 
+             warnings = FALSE) %>% 
+  map(~Ad(get(.))) %>% 
+  reduce(merge) %>%
+  `colnames<-`("SPY") %>% 
+  to.monthly(indexAt = "last", OHLC = FALSE)
+
+market_returns_xts <-
+  Return.calculate(finx_monthly_xts, method = "log") %>% 
+  na.omit()
+```
+
+
+```{r echo=FALSE}
+library(dplyr)
+beta_builtin_xts <- round(CAPM.beta(asset_returns_xts, market_returns_xts),3) %>%
+  data.frame()
+alpha_builitin_xts <- round(CAPM.alpha(asset_returns_xts, market_returns_xts),3)
+
+capm_table <- rbind(alpha_builitin_xts, beta_builtin_xts)
+
+
+capm_table %>%
+  kable() %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+
+
+
+
+# Financial Statements
+
+
+## Annual Profit/Loss of the Companies
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+my_api_key <- 'BCyGJflQJY0ZWt9WhAiKSYwMlIZTW5pm'
+df_info_companies <- simfinR_get_available_companies(my_api_key)
+
+# get info
+df_info_companies <- simfinR_get_available_companies(my_api_key)
+
+id_companies <- c(695370,650768,963381,720635,996256)
+
+type_statements <- c('pl','bs') # profit/loss
+periods = 'Q4' # final year
+years = 2017:2020
+
+df_fin_FY <- simfinR_get_fin_statements(
+  id_companies,
+  type_statements = type_statements,
+  periods = periods,
+  year = years,
+  api_key = my_api_key)
+
+
+net_income <- df_fin_FY %>%
+  filter(acc_name == 'Net Income')
+
+
+net_income %>%
+ggplot( aes(x = year, y = (acc_value)/1000000), color = factor(year)) +
+  geom_col(aes(fill = factor(year))) + 
+  labs(title = 'In millions',
+       x = '',
+       y = 'Net Profit/Loss',
+       caption = 'Data from simfin') + 
+  facet_wrap(~company_name, scales = 'free_y') + 
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))+
+  theme_tq() +
+  guides(fill = guide_colorbar(barwidth = unit(9, "cm"))) +
+  scale_fill_brewer(palette = "Set2")
+
+```
+
+
+## ROE
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+roe_df <- df_fin_FY %>%
+  filter(acc_name %in% c("Net Income","Total Equity")) %>%
+  select(company_name, acc_name, acc_value, ref_date) %>%
+  na.omit() %>%
+  spread(acc_name, acc_value) %>%
+  mutate(ROE = `Net Income`/ `Total Equity`)
+
+roe_df %>%
+  ggplot(aes(x=ref_date,y= ROE)) +
+   geom_line(aes(colour = factor(company_name)), size = 1) +
+  geom_point(aes(colour = factor(company_name)), size = 2) +
+   theme_tq()+
+  labs(title = 'Return on Equity',
+       x = '',
+       y = 'ROE') +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.title=element_blank())
+```
+**General Note** : The data refers to the previus year. For instance, the values for 2020 refers to the 2019 annual report. ROE is most useful when comparing companies within the same industry.
+
+Return on Equity (ROE) is the measure of a company’s annual return (net income) divided by the value of its total shareholders’ equity, expressed as a percentage.
+
+ROE provides a simple metric for evaluating investment returns. By comparing a company’s ROE to the industry’s average, something may be pinpointed about the company’s competitive advantage. ROE may also provide insight into how the company management is using financing from equity to grow the business. A sustainable and increasing ROE over time can mean a company is good at generating shareholder value because it knows how to reinvest its earnings wisely, so as to increase productivity and profits. In contrast, a declining ROE can mean that management is making poor decisions on reinvesting capital in unproductive assets.
+
+#### Why is ROE Important?
+With net income in the numerator, Return on Equity (ROE) looks at the firm’s bottom line to gauge overall profitability for the firm’s owners and investors. Stockholders are at the bottom of the pecking order of a firm’s capital structure, and the income returned to them is a useful measure that represents excess profits that remain after paying mandatory obligations and reinvesting in the business. A high ROE could mean a company is more successful in generating profit internally. However, it doesn’t fully show the risk associated with that return. A company may rely heavily on debt to generate a higher net profit, thereby boosting the ROE higher.
+
+## ROA
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+roa_df <- df_fin_FY %>%
+  filter(acc_name %in% c("Net Income","Total Assets")) %>%
+  select(company_name, acc_name, acc_value, ref_date) %>%
+  na.omit() %>%
+  spread(acc_name, acc_value) %>%
+  mutate(ROA = `Net Income`/ `Total Assets`)
+
+roa_df %>%
+  ggplot(aes(x=ref_date,y= ROA)) +
+   geom_line(aes(colour = factor(company_name)), size = 1) +
+  geom_point(aes(colour = factor(company_name)), size = 2) +
+   theme_tq()+
+  labs(title = 'Return on Assets',
+       x = '',
+       y = 'ROA') +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.title=element_blank())
+```
+**General Notes**: ROA is best used when comparing similar companies or comparing a company to its previous performance. The data refers to the previus year.
+
+Return on assets (ROA) is an indicator of how profitable a company is relative to its total assets. ROA gives a manager, investor, or analyst an idea as to how efficient a company's management is at using its assets to generate earnings. Return on assets is displayed as a percentage. (Investopedia)
+
+The ROA figure gives investors an idea of how effective the company is in converting the money it invests into net income. The higher the ROA number, the better, because the company is earning more money on less investment.
+
+
+
+## Quarterly Profit/Loss of the Companies
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+type_statements <- c("bs","pl","cf") # profit/loss
+periods = c('Q1', 'Q2', 'Q3', 'Q4') # final year
+years = 2018:2020
+
+df_fin_quarters <- simfinR_get_fin_statements(
+  id_companies,
+  type_statements = type_statements,
+  periods = periods,
+  year = years,
+  api_key = my_api_key)
+
+
+net_income_q <- df_fin_quarters %>% 
+  filter(acc_name == 'Net Income')
+
+
+net_income_q %>%
+  ggplot(aes(x = ref_date, y = acc_value/1000000), color = period ) +
+  geom_col(aes(fill = period)) + 
+  labs(title = 'In millions',
+       x = '',
+       y = 'Net Profit/Loss',
+       caption = 'Data from simfin') + 
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))+
+  facet_wrap(~company_name ,scales = 'free' , ncol = 2) +
+  theme_tq()+
+scale_x_date(
+    date_labels = "%m/%y") +
+   scale_fill_brewer(palette = "Set2")
+```
+
+
+## Net Profit Margin
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+NPM_df <- df_fin_quarters %>%
+  select("company_name","ref_date","acc_name","acc_value") %>%
+  filter(acc_name %in% c("Net Income","Revenue")) %>%
+  na.omit()%>%
+  as.data.frame()%>%
+  spread(acc_name,acc_value)%>%
+    mutate(NPM = `Net Income`/ `Revenue`)
+  
+
+NPM_df %>%
+  ggplot(aes(x=ref_date,y= NPM)) +
+   geom_line(aes(colour = factor(company_name)), size = 1) +
+  geom_point(aes(colour = factor(company_name)), size = 2) +
+   theme_tq()+
+  labs(title = 'Net Profit Margin',
+       x = '',
+       y = 'NPM') +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.title=element_blank())
+
+```
+
+
+Net profit margin is one of the most important indicators of a company's financial health. By tracking increases and decreases in its net profit margin, a company can assess whether current practices are working and forecast profits based on revenues. Because companies express net profit margin as a percentage rather than a dollar amount, it is possible to compare the profitability of two or more businesses regardless of size.
+
+Investors can assess if a company's management is generating enough profit from its sales and whether operating costs and overhead costs are being contained. For example, a company can have growing revenue, but if its operating costs are increasing at a faster rate than revenue, its net profit margin will shrink. Ideally, investors want to see a track record of expanding margins meaning that net profit margin is rising over time.
+
+## Liquidity Ratio's
+
+### Current Ratio
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+cr_df <- df_fin_quarters %>%
+  filter(acc_name %in% c("Total Current Assets","Total Current Liabilities")) %>%
+  select(company_name, acc_name, acc_value, ref_date) %>%
+  na.omit() %>%
+  spread(acc_name, acc_value) %>%
+  mutate(CR = `Total Current Assets`/ `Total Current Liabilities`)
+
+cr_df %>%
+  ggplot(aes(x=ref_date,y= CR)) +
+   geom_line(aes(colour = factor(company_name)), size = 1) +
+  geom_point(aes(colour = factor(company_name)), size = 2) +
+   theme_tq()+
+  labs(title = 'Current Ratio',
+       x = '',
+       y = 'CR') +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.title=element_blank())
+```
+
+The current ratio is a liquidity ratio that measures a company's ability to pay short-term obligations or those due within one year
+A ratio under 1 indicates that the company’s debts due in a year or less are greater than its assets (cash or other short-term assets expected to be converted to cash within a year or less.).
+On the other hand, in theory, the higher the current ratio, the more capable a company is of paying its obligations because it has a larger proportion of short-term asset value relative to the value of its short-term liabilities. However, while a high ratio, say over 3, could indicate the company can cover its current liabilities three times, it may indicate that it's not using its current assets efficiently, is not securing financing very well, or is not managing its working capital.
+
+
+### Quick Ratio (Acid test ratio)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qr_df <- df_fin_quarters %>%
+  filter(acc_name %in% c("Cash & Cash Equivalents", "Short Term Investments", "Accounts Receivable, Net",
+                         	"Total Current Liabilities")) %>%
+  select(company_name, acc_name, acc_value, ref_date) %>%
+  na.omit() %>%
+  spread(acc_name, acc_value) %>%
+  mutate(QR = (`Cash & Cash Equivalents` + `Short Term Investments` + `Accounts Receivable, Net`)/ `Total Current Liabilities`)
+
+qr_df %>%
+  ggplot(aes(x=ref_date,y= QR)) +
+   geom_line(aes(colour = factor(company_name)), size = 1) +
+  geom_point(aes(colour = factor(company_name)), size = 2) +
+   theme_tq()+
+  labs(title = 'Quick Ratio',
+       x = '',
+       y = 'QR') +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.title=element_blank())
+```
+
+The quick ratio indicates a company's capacity to pay its current liabilities without needing to sell its inventory or get additional financing.
+The quick ratio is considered a more conservative measure than the current ratio, which includes all current assets as coverage for current liabilities.
+The higher the ratio result, the better a company's liquidity and financial health; the lower the ratio, the more likely the company will struggle with paying debts.
+
+#### Quick Ratio vs. Current Ratio
+The quick ratio is more conservative than the current ratio because it excludes inventory and other current assets, which are generally more difficult to turn into cash. The quick ratio considers only assets that can be converted to cash very quickly. The current ratio, on the other hand, considers inventory and prepaid expense assets. In most companies, inventory takes time to liquidate, although a few rare companies can turn their inventory fast enough to consider 
+it a quick asset. Prepaid expenses, though an asset, cannot be used to pay for current liabilities, so they're omitted from the quick ratio.
+
+
+
+
+

@@ -1,0 +1,405 @@
+---
+title: "My Personal portfolio"
+author: "Elior Bliah"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    df_print: kable
+    results: show
+    theme: flatly
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(quantmod)
+library(PerformanceAnalytics)
+library(dygraphs)
+library(xts)
+library(zoo)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(plotly) # To create interactive charts
+library(timetk)
+library(tidyquant)# To manipulate the data series
+library(ggcorrplot)
+library(zoo)
+library(kableExtra)
+library(formattable)
+```
+
+## List of financial assets
+```{r message=FALSE, warning=FALSE}
+
+tickers <- c('INTC','WIX','JETS','IBCD.DE','SPEN.TA','SE', 'SPY', 'AMD')
+price_data <- tq_get(tickers,
+                     from = '2018-01-01',
+                     to = as.Date(now()),
+                     get = 'stock.prices')
+
+log_ret_tidy <- price_data %>%
+  group_by(symbol) %>%
+  tq_transmute(select = adjusted,
+               mutate_fun = periodReturn,
+               period = 'daily',
+               col_rename = 'ret',
+               type = 'log')
+
+#spread the data
+log_ret_xts <- log_ret_tidy %>%
+  spread(symbol, value = ret) %>%
+  na.omit() %>%
+  tk_xts() %>% as.data.frame()
+
+spy <- log_ret_xts %>%
+  select(SPY)
+
+
+log_ret_xts <- log_ret_xts %>%
+  select(-'SPY')
+
+mean_ret <- colMeans(log_ret_xts)
+
+knitr::kable(tickers, 
+             col.names = c("Assets Symbols")) %>%
+   kable_classic(full_width = F, html_font = "Cambria",  position = "left")
+```
+
+
+
+## Correlation Matrix
+```{r message=FALSE, warning=FALSE}
+cov_mat <- cov(log_ret_xts) * 252
+
+corr_mat<- round(cor(log_ret_xts), 1)
+ggcorrplot(corr_mat, hc.order = TRUE, type = "lower",
+   lab = TRUE)
+```
+
+## Distribution of the stocks
+```{r}
+log_ret_tidy %>%
+  ggplot(aes(x = ret, fill = symbol)) +
+  geom_density(alpha = 0.5) +
+  labs( x = "Daily return", y = "Density") +
+  theme_tq() +
+  scale_fill_tq() + 
+  facet_wrap(~ symbol, ncol = 2)
+```
+
+
+
+To calculate the portfolio returns and risk (standard deviation) we will need
+
+1. Mean assets returns
+2. Portfolio weights
+3. Covariance matrix of all assets
+4. Random weights
+
+
+we will assume 0.09% risk free rate to calculate the Sharpe Ratio (3 month T-bills)
+We have everything we need to perform our optimization. All we need now is to run this code on 5000 random portfolios. For that we will use a for loop.
+
+Before we do that, we need to create empty vectors and matrix for storing our values. The code is as the follow (with some explianations)
+
+#### creation of 5000 portfolio with random weights
+```{r message=FALSE, warning=FALSE}
+
+# create random weights first
+wts <- runif(n = length(tickers)-1)
+wts <- wts/sum(wts)
+
+## calculate the annualized portfolio returns
+
+port_returns <- (sum(wts * mean_ret) + 1)^252 - 1
+
+
+# Next we will calculate the portfolio risk (Standard deviation). This will be annualized Standard deviation for the portfolio. We will use linear algebra to calculate our portfolio risk.
+
+port_risk <- sqrt(t(wts) %*% (cov_mat %*% wts))
+
+sharpe_ratio <- as.numeric(port_returns-0.0009)/port_risk %>%
+  as.data.frame() %>%
+  rename( sharpe_ratio = V1) 
+
+num_port <- 5000
+
+# Creating a matrix to store the weights
+
+all_wts <- matrix(nrow = num_port,
+                  ncol = length(tickers)-1)
+
+# Creating an empty vector to store
+# Portfolio returns
+
+port_returns <- vector('numeric', length = num_port)
+
+# Creating an empty vector to store
+# Portfolio Standard deviation
+
+port_risk <- vector('numeric', length = num_port)
+
+# Creating an empty vector to store
+# Portfolio Sharpe Ratio
+
+sharpe_ratio <- vector('numeric', length = num_port)
+
+for (i in seq_along(port_returns)) {
+  
+  wts <- runif(length(tickers)-1)
+  wts <- wts/sum(wts)
+  
+  # Storing weight in the matrix
+  all_wts[i,] <- wts
+  
+  # Portfolio returns
+  
+  port_ret <- sum(wts * mean_ret)
+  port_ret <- ((port_ret + 1)^252) - 1
+  
+  # Storing Portfolio Returns values
+  port_returns[i] <- port_ret
+  
+  
+  # Creating and storing portfolio risk
+  port_sd <- sqrt(t(wts) %*% (cov_mat  %*% wts))
+  port_risk[i] <- port_sd
+  
+  # Creating and storing Portfolio Sharpe Ratios
+  # Assuming 0% Risk free rate
+  
+  sr <- port_ret/port_sd
+  sharpe_ratio[i] <- sr
+  
+}
+
+# Storing the values in the table
+portfolio_values <- tibble(Return = port_returns,
+                  Risk = port_risk,
+                  SharpeRatio = sharpe_ratio)
+
+
+# Converting matrix to a tibble and changing column names
+all_wts <- tk_tbl(all_wts)
+
+colnames(all_wts) <- colnames(log_ret_xts)
+
+# Combing all the values together
+portfolio_values <- tk_tbl(cbind(all_wts, portfolio_values))
+```
+
+Next, lets look at the portfolios that matter the most.
+
+
+## The Minimum Variance Portfolio
+
+
+```{r}
+min_var <- portfolio_values[which.min(portfolio_values$Risk),]
+max_sr <- portfolio_values[which.max(portfolio_values$SharpeRatio),]
+
+p <- min_var %>%
+  gather(names(min_var)[1]:names(min_var)[ncol(min_var)-3], key = Asset,
+         value = Weights) %>%
+  mutate(Asset = as.factor(Asset)) %>%
+  ggplot(aes(x = fct_reorder(Asset,Weights), y = Weights, fill = Asset)) +
+  geom_bar(stat = 'identity') +
+  theme_minimal() +
+  labs(x = 'Assets', y = 'Weights', title = "Minimum Variance Portfolio Weights") +
+  scale_y_continuous(labels = scales::percent) 
+
+ggplotly(p)
+
+
+```
+
+
+## The tangency portfolio 
+
+(the portfolio with highest sharpe ratio)
+
+
+```{r}
+p <- max_sr %>%
+  gather(names(min_var)[1]:names(min_var)[ncol(min_var)-3], key = Asset,
+         value = Weights) %>%
+  mutate(Asset = as.factor(Asset)) %>%
+  ggplot(aes(x = fct_reorder(Asset,Weights), y = Weights, fill = Asset)) +
+  geom_bar(stat = 'identity') +
+  theme_minimal() +
+  labs(x = 'Assets', y = 'Weights', title = "Tangency Portfolio Weights") +
+  scale_y_continuous(labels = scales::percent) 
+
+ggplotly(p)
+```
+
+
+## The Efficient Frontier
+
+```{r}
+p <- portfolio_values %>%
+  ggplot(aes(x = Risk, y = Return, color = SharpeRatio)) +
+  geom_point() +
+  theme_classic() +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(x = 'Annualized Risk',
+       y = 'Annualized Returns',
+       title = "Portfolio Optimization & Efficient Frontier") +
+  geom_point(aes(x = Risk,
+                 y = Return), data = min_var, color = 'red') +
+  geom_point(aes(x = Risk,
+                 y = Return), data = max_sr, color = 'red') +
+  annotate('text', x = 0.20, y = 0.42, label = "Tangency Portfolio") +
+  annotate('text', x = 0.18, y = 0.01, label = "Minimum variance portfolio") +
+  annotate(geom = 'segment', x = 0.14, xend = 0.135,  y = 0.01, 
+           yend = 0.06, color = 'red', arrow = arrow(type = "open")) +
+  annotate(geom = 'segment', x = 0.22, xend = 0.2275,  y = 0.405, 
+           yend = 0.365, color = 'red', arrow = arrow(type = "open"))
+  
+
+ggplotly(p)
+```
+
+
+#### Purchased stocks
+```{r message=FALSE, warning=FALSE, include= FALSE}
+AYX <- 111.3699
+INTC  <- 49.6778
+JETS  <- 17.895
+WIX  <- 311.5599
+SPEN.TA <- 2227
+IBCD.DE <-109.96
+SGOL<- 15.87
+MMM <- 153.25
+
+AYX_BD<- dmy("09/09/2020")
+INTC_BD<-dmy("09/09/2020")
+JETS_BD<-dmy("09/09/2020")
+WIX_BD<-dmy("05/08/2020")
+SPEN.TA_BD<-dmy("13/01/2020")
+IBCD.DE_BD <- dmy("09/09/2020")
+SGOL_BD <- dmy("27/02/2020")
+MMM_BD <- dmy("27/02/2020")
+```
+
+
+
+## Summary of my holdings
+
+```{r message=FALSE, warning=FALSE}
+#buy prices
+
+
+buy<-data.frame(symbol = c("AYX","INTC","JETS","WIX","SPEN.TA","IBCD.DE","MMM","SGOL"), 
+                 buy_date = c(AYX_BD,INTC_BD,JETS_BD,WIX_BD,SPEN.TA_BD,IBCD.DE_BD,SGOL_BD, MMM_BD),
+                buy_price = c(AYX,INTC,JETS,WIX,SPEN.TA,IBCD.DE, MMM, SGOL)
+               )
+
+
+na.locf2 <- function(x) na.locf(x, na.rm = FALSE)
+
+current_prices <- price_data %>% select(symbol, date, adjusted) %>% 
+  group_by(symbol) %>% do(na.locf2(.)) %>% ungroup %>% 
+  spread(symbol, adjusted) %>% 
+  slice(which.max(as.Date(date, '%d/%m/%Y'))) %>%
+  as.data.frame()
+  
+updated<- current_prices$date  
+
+current_prices <- current_prices %>%
+  select(-date) %>%
+  gather()
+
+current_prices<- data_frame( rep(updated, nrow(current_prices)),  current_prices) %>%
+  rename(current_date = 'rep(updated, nrow(current_prices))')
+
+
+  table2<- merge.data.frame(buy, current_prices, by.x = "symbol", by.y = "key") %>%
+    rename(current_price = value) %>%
+    mutate(  "total return" = (current_price/buy_price-1)) %>%
+    mutate(  "Holding time (M)" = as.numeric(current_date - buy_date)/30.42) %>%
+    mutate("return per month" = `total return`/ `Holding time (M)`)
+    
+table2 %>%
+  kbl(digits = 3) %>%
+   kable_classic(full_width = F, html_font = "Cambria",  position = "left") %>%
+  column_spec(6, color = "white",
+              background = spec_color(table2$`total return`, end = 0.7),
+              popover = paste("am:", mtcars$am[1:8]))
+
+
+  
+
+```
+
+
+## Sold stocks summary
+```{r message=FALSE, warning=FALSE}
+SGOL_SP <- 19.61
+MMM_SP <- 154.96
+AYX_SP <- 144.61
+
+SGOL_SD <- dmy("05/08/2020")
+MMM_SD <- dmy("05/08/2020")
+AYX_SD <- dmy("06/10/2020")
+
+
+
+sold <-data.frame(symbol = c("SGOL","MMM","AYX"),
+                sold_date = c(SGOL_SD,MMM_SD,AYX_SD), 
+                sold_price = c(SGOL_SP,MMM_SP,AYX_SP))
+
+  table3<- merge.data.frame(buy, sold, by.x = "symbol", by.y = "symbol") %>%
+    mutate(  "total return" = (sold_price/buy_price-1)) %>%
+    mutate(  "Holding time (M)" = as.numeric(sold_date - buy_date)/30.42) %>%
+    mutate("return per month" = `total return`/ `Holding time (M)`)
+    
+table3 %>%
+  kbl() %>%
+   kable_classic(full_width = F, html_font = "Cambria",  position = "left") %>%
+  column_spec(6, color = "white",
+              background = spec_color(table2$`total return`, end = 0.7),
+              popover = paste("am:", mtcars$am[1:8]))
+
+
+```
+
+
+## comparing performance  to Benchmark
+*Note*: only for current holdings
+
+```{r}
+wts_e <- c(rep(1/length(colnames(log_ret_xts)),length(colnames(log_ret_xts))))
+
+portfolio_returns_e <- Return.portfolio(R = log_ret_xts, weights = wts_e, wealth.index = TRUE)
+
+
+
+benchmark_returns <- Return.portfolio(R = spy , wealth.index = TRUE)
+
+# Merge the two
+comp <- merge.xts(portfolio_returns_e, benchmark_returns)
+colnames(comp) <- c("Portfolio", "Benchmark")
+
+# Build an interactive graph to compare performance
+
+comp %>% 
+dygraph( main = "Portfolio Performance vs. Benchmark") %>%
+  dyAxis("y", label = "Amount ($)")
+
+
+
+
+```
+
+
+
+
+
