@@ -32,12 +32,14 @@ library(ggcorrplot)
 library(zoo)
 library(kableExtra)
 library(formattable)
+library(quantmod)
 ```
 
 ## List of financial assets
 ```{r message=FALSE, warning=FALSE}
 
-tickers <- c('INTC','WIX','JETS','IBCD.DE','SPEN.TA','SE', 'SPY', 'AMD')
+tickers <- c('INTC','JETS','IBCD.DE','SPEN.TA', 'ELWS.TA',
+             'WIX','SE', 'QQQ','SPY','ENLT.TA','SEDG')
 price_data <- tq_get(tickers,
                      from = '2018-01-01',
                      to = as.Date(now()),
@@ -66,11 +68,21 @@ log_ret_xts <- log_ret_xts %>%
 
 mean_ret <- colMeans(log_ret_xts)
 
-knitr::kable(tickers, 
-             col.names = c("Assets Symbols")) %>%
+
+cap<- getQuote(tickers, what = yahooQF(c("Market Capitalization", "Earnings/Share", 
+         "P/E Ratio", "Book Value", "EBITDA", "52-week Range")))
+cap %>%
+  as.data.frame() %>%
+   select(-`Trade Time`) %>%
+  kbl() %>%
    kable_classic(full_width = F, html_font = "Cambria",  position = "left")
+
 ```
 
+```{r}
+price_data %>%
+  ggplot(aes(x=date, y= adjusted, color = symbol))+ geom_line()+ geom_smooth(method = "loess") + scale_y_log10()
+```
 
 
 ## Correlation Matrix
@@ -81,18 +93,6 @@ corr_mat<- round(cor(log_ret_xts), 1)
 ggcorrplot(corr_mat, hc.order = TRUE, type = "lower",
    lab = TRUE)
 ```
-
-## Distribution of the stocks
-```{r}
-log_ret_tidy %>%
-  ggplot(aes(x = ret, fill = symbol)) +
-  geom_density(alpha = 0.5) +
-  labs( x = "Daily return", y = "Density") +
-  theme_tq() +
-  scale_fill_tq() + 
-  facet_wrap(~ symbol, ncol = 2)
-```
-
 
 
 To calculate the portfolio returns and risk (standard deviation) we will need
@@ -278,6 +278,8 @@ SPEN.TA <- 2227
 IBCD.DE <-109.96
 SGOL<- 15.87
 MMM <- 153.25
+SE <- 160.39
+SEDG <- 262
 
 AYX_BD<- dmy("09/09/2020")
 INTC_BD<-dmy("09/09/2020")
@@ -287,6 +289,8 @@ SPEN.TA_BD<-dmy("13/01/2020")
 IBCD.DE_BD <- dmy("09/09/2020")
 SGOL_BD <- dmy("27/02/2020")
 MMM_BD <- dmy("27/02/2020")
+SE_BD <- dmy("30/10/2020")
+SEDG_BD <- dmy("30/10/2020")
 ```
 
 
@@ -297,9 +301,11 @@ MMM_BD <- dmy("27/02/2020")
 #buy prices
 
 
-buy<-data.frame(symbol = c("AYX","INTC","JETS","WIX","SPEN.TA","IBCD.DE","MMM","SGOL"), 
-                 buy_date = c(AYX_BD,INTC_BD,JETS_BD,WIX_BD,SPEN.TA_BD,IBCD.DE_BD,SGOL_BD, MMM_BD),
-                buy_price = c(AYX,INTC,JETS,WIX,SPEN.TA,IBCD.DE, MMM, SGOL)
+buy<-data.frame(symbol = c("AYX","INTC","JETS","WIX","SPEN.TA","IBCD.DE","MMM","SGOL","SE",
+                           
+                           "SEDG"), 
+                 buy_date = c(AYX_BD,INTC_BD,JETS_BD,WIX_BD,SPEN.TA_BD,IBCD.DE_BD,SGOL_BD, MMM_BD,SE_BD, SEDG_BD),
+                buy_price = c(AYX,INTC,JETS,WIX,SPEN.TA,IBCD.DE, MMM, SGOL,SE,SEDG)
                )
 
 
@@ -345,6 +351,7 @@ table2 %>%
 SGOL_SP <- 19.61
 MMM_SP <- 154.96
 AYX_SP <- 144.61
+
 
 SGOL_SD <- dmy("05/08/2020")
 MMM_SD <- dmy("05/08/2020")

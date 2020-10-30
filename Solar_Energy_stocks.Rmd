@@ -1,5 +1,5 @@
 ---
-title: "Top U.S. airline compamies: Stocks performance"
+title: "Top Solar Energy Companies: Stocks performance"
 author: "Elior Bliah"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 output:
@@ -23,7 +23,7 @@ pacman::p_load(tidyverse, quantmod,tidyquant,tibbletime,knitr,webshot, timetk, b
 
 
 ```{r include=FALSE}
-tickers <- c("AAL","DAL","UAL","LUV")
+tickers <- c("JKS","SEDG","VSLR","DQ","FSLR","ENPH")
 
 prices <- tq_get(tickers,
                  from = "2018-01-01",
@@ -32,15 +32,30 @@ prices <- tq_get(tickers,
   group_by(symbol)
 
 
-prices$symbol[prices$symbol == "AAL"] <- "American airlines"
-prices$symbol[prices$symbol == "DAL"] <- "Delta"
-prices$symbol[prices$symbol == "UAL"] <- "United airlines"
-prices$symbol[prices$symbol == "LUV"] <- "Southwest Airlines"
-prices$symbol[prices$symbol == "FSLY"] <- "Fastly"
+prices$symbol[prices$symbol == "JKS"] <- "JinkoSolar Holding Co."
+prices$symbol[prices$symbol == "SEDG"] <- "SolarEdge Technologies Inc."
+prices$symbol[prices$symbol == "DQ"] <- "Daqo New Energy Corp."
+prices$symbol[prices$symbol == "VSLR"] <- "Vivint Solar Inc."
+prices$symbol[prices$symbol == "FSLR"] <- "First Sloar"
+prices$symbol[prices$symbol == "ENPH"] <- "Enphase Energy Inc."
 
 ```
 
 # Stocks Analysis
+
+**JinkoSolar Holding Co. Ltd.**: JinkoSolar is a China-based solar energy company that manufactures solar products including silicon wafers, solar cells, and solar modules. The company also offers solar system integration services.
+
+**Daqo New Energy Corp.**: Daqo New Energy is a China-based solar energy company that manufactures polysilicon for distribution to manufacturers of solar technology products.
+
+**SolarEdge Technologies Inc.**: SolarEdge Technologies is an Israel-based solar energy company that provides solar power optimization and photovoltaic monitoring solutions. The company provides optimizers, inverters, monitoring equipment, tools, and accessories for the purpose of power harvesting, conversion, and efficiency. SolarEdge reported net income growth of 11.4% on revenue growth of 2.1% in Q2 2020, which ended June 30, 2020.
+
+**Vivint Solar Inc.**: Vivint Solar is a residential solar energy provider that designs, installs, and maintains photovoltaic systems. A class action lawsuit was filed against Vivint this week for failing to disclose material information concerning a merger agreement between the company and Sunrun Inc. The merger, through which Sunrun would acquire Vivint in an all-cash transaction worth $3.2 billion, was announced in early July.
+
+**First Solar Inc.**: First Solar designs and manufactures solar power systems and solar modules. The company utilizes a thin film semiconductor technology to manufacture electricity-producing solar modules. The company reported positive earnings per share (EPS) of $0.35 in Q2 2020, which ended June 30, 2020. It was a significant change from the loss reported in the same three-month period a year ago. The company said that its financial results have not been materially impacted by COVID-19, but that uncertainties remain regarding the severity and duration of the pandemic.
+
+**Enphase Energy Inc.**: Enphase Energy provides solar energy cells and monitoring equipment for distributors, large installers, original equipment manufacturers, strategic partners, and homeowners.
+
+*Note*: The descriptions are from [Investopedia](https://www.investopedia.com/investing/top-solar-stocks/).
 
 # Daily Stock Prices
 
@@ -55,7 +70,6 @@ prices %>%
   labs( x = "", y = "Adjusted Prices", color = "", size = 0.5) +
   facet_wrap(~ symbol, ncol = 2, scales = "free_y") +
   scale_y_continuous(labels = scales::dollar) +
-  scale_y_log10() +
   theme_tq() + 
   scale_color_tq()
 ```
@@ -207,7 +221,7 @@ asset_returns_xts <- na.omit(Return.calculate(prices_monthly, method = "log"))
 
 ## Important ratios
 
-```{r echo=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+```{r}
 cap<- getQuote(tickers, what = yahooQF(c("Market Capitalization", "Earnings/Share", 
          "P/E Ratio", "Book Value", "EBITDA", "52-week Range")))
 cap %>%
@@ -298,6 +312,10 @@ capm_table %>%
   kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
 ```
 
+
+
+
+
 # Financial Statements
 
 
@@ -311,11 +329,11 @@ df_info_companies <- simfinR_get_available_companies(my_api_key)
 # get info
 df_info_companies <- simfinR_get_available_companies(my_api_key)
 
-id_companies <- c(68568,231789,219075,205563)
+id_companies <- c(847001,809892,260908,917156)
 
 type_statements <- c('pl','bs') # profit/loss
 periods = 'Q4' # final year
-years = 2017:2020
+years = 2016:2020
 
 df_fin_FY <- simfinR_get_fin_statements(
   id_companies,
@@ -345,7 +363,6 @@ ggplot( aes(x = year, y = (acc_value)/1000000), color = factor(year)) +
 ```
 
 
-
 ## ROE
 
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
@@ -368,8 +385,6 @@ roe_df %>%
   scale_fill_brewer(palette = "Set2") +
   theme(legend.title=element_blank())
 ```
-
-\newline
 **General Note** : The data refers to the previus year. For instance, the values for 2020 refers to the 2019 annual report. ROE is most useful when comparing companies within the same industry.
 
 Return on Equity (ROE) is the measure of a company’s annual return (net income) divided by the value of its total shareholders’ equity, expressed as a percentage.
@@ -401,9 +416,6 @@ roa_df %>%
   scale_fill_brewer(palette = "Set2") +
   theme(legend.title=element_blank())
 ```
-
-\newline
-
 **General Notes**: ROA is best used when comparing similar companies or comparing a company to its previous performance. The data refers to the previus year.
 
 Return on assets (ROA) is an indicator of how profitable a company is relative to its total assets. ROA gives a manager, investor, or analyst an idea as to how efficient a company's management is at using its assets to generate earnings. Return on assets is displayed as a percentage. (Investopedia)
@@ -473,7 +485,7 @@ NPM_df %>%
 
 ```
 
-\newline
+
 Net profit margin is one of the most important indicators of a company's financial health. By tracking increases and decreases in its net profit margin, a company can assess whether current practices are working and forecast profits based on revenues. Because companies express net profit margin as a percentage rather than a dollar amount, it is possible to compare the profitability of two or more businesses regardless of size.
 
 Investors can assess if a company's management is generating enough profit from its sales and whether operating costs and overhead costs are being contained. For example, a company can have growing revenue, but if its operating costs are increasing at a faster rate than revenue, its net profit margin will shrink. Ideally, investors want to see a track record of expanding margins meaning that net profit margin is rising over time.
@@ -541,35 +553,48 @@ it a quick asset. Prepaid expenses, though an asset, cannot be used to pay for c
 
 # Technical Analysis
 
-## American Airlines 
+## JinkoSolar Holding 
 ```{r message=FALSE, warning=FALSE, ,echo=FALSE}
 getSymbols(tickers,from="2020-01-01",to=as.Date(NOW()))
-stock_log_returns<- AAL %>%Ad()%>%dailyReturn(type='log')
+stock_log_returns<-JKS%>%Ad()%>%dailyReturn(type='log')
 
-AAL%>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
+JKS%>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
 ```
 
-## Delta
+## SolarEdge
 ```{r ,echo=FALSE, message=FALSE, warning=FALSE}
-stock_log_returns<-DAL %>%Ad()%>%dailyReturn(type='log')
+stock_log_returns<-SEDG%>%Ad()%>%dailyReturn(type='log')
 
-DAL %>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
+SEDG%>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
 ```
 
-## United Airlines
+## Daqo New Energy Corp.
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-stock_log_returns<-UAL %>%Ad()%>%dailyReturn(type='log')
+stock_log_returns<-DQ%>%Ad()%>%dailyReturn(type='log')
 
-UAL %>% chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
+DQ%>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
 ```
 
-## Southwest Airlines
+## Vivint Solar Inc.
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
-stock_log_returns<-LUV %>%Ad()%>%dailyReturn(type='log')
+stock_log_returns<-VSLR%>%Ad()%>%dailyReturn(type='log')
 
-LUV %>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
+VSLR%>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
 ```
 
+## First Solar
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+stock_log_returns<-FSLR%>%Ad()%>%dailyReturn(type='log')
+
+FSLR%>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
+```
+
+## Enphase Energy Inc.
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+stock_log_returns<-ENPH%>%Ad()%>%dailyReturn(type='log')
+
+ENPH%>%chartSeries(TA='addBBands();addVo();addMACD()',subset='2020')
+```
 
 > Please do **not** consider any of the information above as a recommendation.
 
