@@ -38,10 +38,9 @@ library(quantmod)
 ## List of financial assets
 ```{r message=FALSE, warning=FALSE}
 
-tickers <- c('INTC','JETS','IBCD.DE','SPEN.TA', 'ELWS.TA',
-             'WIX','SE', 'QQQ','SPY','ENLT.TA','SEDG')
+tickers <- c('INTC','JETS','IBCD.DE','WIX','SE','SPY','SEDG','SPEN.TA','ENLT.TA','ELRN.TA','SHOM.TA')
 price_data <- tq_get(tickers,
-                     from = '2018-01-01',
+                     from = '2020-01-01',
                      to = as.Date(now()),
                      get = 'stock.prices')
 
@@ -68,22 +67,35 @@ log_ret_xts <- log_ret_xts %>%
 
 mean_ret <- colMeans(log_ret_xts)
 
-
-cap<- getQuote(tickers, what = yahooQF(c("Market Capitalization", "Earnings/Share", 
+## "Market Capitalization"
+cap<- getQuote(tickers, what = yahooQF(c( "Earnings/Share", 
          "P/E Ratio", "Book Value", "EBITDA", "52-week Range")))
 cap %>%
+  na.omit() %>%
   as.data.frame() %>%
    select(-`Trade Time`) %>%
   kbl() %>%
    kable_classic(full_width = F, html_font = "Cambria",  position = "left")
 
 ```
+**note** : Missing data for certain companies
 
-```{r}
+# My Israeli stocks
+
+**note** :Loess regression for each stock
+```{r message=FALSE, warning=FALSE}
 price_data %>%
+  subset(symbol == c('SPEN.TA','ENLT.TA','ELRN.TA','SHOM.TA')) %>%
   ggplot(aes(x=date, y= adjusted, color = symbol))+ geom_line()+ geom_smooth(method = "loess") + scale_y_log10()
 ```
 
+# My stocks in Wall St. 
+
+```{r message=FALSE, warning=FALSE}
+price_data %>%
+  subset(symbol == c('INTC','JETS','IBCD.DE','WIX','SE','SEDG')) %>%
+  ggplot(aes(x=date, y= adjusted, color = symbol))+ geom_line()+ geom_smooth(method = "loess") + scale_y_log10()
+```
 
 ## Correlation Matrix
 ```{r message=FALSE, warning=FALSE}
@@ -270,6 +282,7 @@ ggplotly(p)
 
 #### Purchased stocks
 ```{r message=FALSE, warning=FALSE, include= FALSE}
+ORL.TA <- 101
 AYX <- 111.3699
 INTC  <- 49.6778
 JETS  <- 17.895
@@ -280,32 +293,37 @@ SGOL<- 15.87
 MMM <- 153.25
 SE <- 160.39
 SEDG <- 262
+ENLT.TA <- 646.2
+ELRN.TA <- 1068.0
+SHOM.TA <- 875
 
-AYX_BD<- dmy("09/09/2020")
-INTC_BD<-dmy("09/09/2020")
-JETS_BD<-dmy("09/09/2020")
-WIX_BD<-dmy("05/08/2020")
-SPEN.TA_BD<-dmy("13/01/2020")
+ORL.TA_BD <- dmy("20/04/2020") 
+AYX_BD <- dmy("09/09/2020")
+INTC_BD <-dmy("09/09/2020")
+JETS_BD <-dmy("09/09/2020")
+WIX_BD <-dmy("05/08/2020")
+SPEN.TA_BD <-dmy("13/01/2020")
 IBCD.DE_BD <- dmy("09/09/2020")
 SGOL_BD <- dmy("27/02/2020")
 MMM_BD <- dmy("27/02/2020")
 SE_BD <- dmy("30/10/2020")
 SEDG_BD <- dmy("30/10/2020")
+ENLT.TA_BD <- dmy("22/11/2020")
+ELRN.TA_BD <- dmy("22/11/2020")
+SHOM.TA_BD <- dmy("22/11/2020")
 ```
 
 
 
-## Summary of my holdings
+## Summary of my current holdings
 
 ```{r message=FALSE, warning=FALSE}
 #buy prices
 
 
-buy<-data.frame(symbol = c("AYX","INTC","JETS","WIX","SPEN.TA","IBCD.DE","MMM","SGOL","SE",
-                           
-                           "SEDG"), 
-                 buy_date = c(AYX_BD,INTC_BD,JETS_BD,WIX_BD,SPEN.TA_BD,IBCD.DE_BD,SGOL_BD, MMM_BD,SE_BD, SEDG_BD),
-                buy_price = c(AYX,INTC,JETS,WIX,SPEN.TA,IBCD.DE, MMM, SGOL,SE,SEDG)
+buy<-data.frame(symbol = c("ORL.TA", "AYX", "INTC", "JETS", "WIX", "SPEN.TA", "IBCD.DE", "MMM", "SGOL", "SE", "SEDG", "ENLT.TA", "ELRN.TA", "SHOM.TA"), 
+                 buy_date = c(ORL.TA_BD,   AYX_BD, INTC_BD, JETS_BD, WIX_BD, SPEN.TA_BD, IBCD.DE_BD, SGOL_BD, MMM_BD,SE_BD, SEDG_BD,ENLT.TA_BD, ELRN.TA_BD, SHOM.TA_BD),
+                buy_price = c(ORL.TA, AYX,INTC, JETS, WIX, SPEN.TA, IBCD.DE, MMM, SGOL, SE, SEDG, ENLT.TA, ELRN.TA, SHOM.TA)
                )
 
 
@@ -351,17 +369,19 @@ table2 %>%
 SGOL_SP <- 19.61
 MMM_SP <- 154.96
 AYX_SP <- 144.61
+ORL.TA_SP <- 66.8
 
 
 SGOL_SD <- dmy("05/08/2020")
 MMM_SD <- dmy("05/08/2020")
 AYX_SD <- dmy("06/10/2020")
+ORL.TA_SD <- dmy("10/08/2020")
 
 
 
-sold <-data.frame(symbol = c("SGOL","MMM","AYX"),
-                sold_date = c(SGOL_SD,MMM_SD,AYX_SD), 
-                sold_price = c(SGOL_SP,MMM_SP,AYX_SP))
+sold <-data.frame(symbol = c("SGOL","MMM","AYX","ORL.TA"),
+                sold_date = c(SGOL_SD,MMM_SD,AYX_SD, ORL.TA_SD ), 
+                sold_price = c(SGOL_SP,MMM_SP,AYX_SP,ORL.TA_SP))
 
   table3<- merge.data.frame(buy, sold, by.x = "symbol", by.y = "symbol") %>%
     mutate(  "total return" = (sold_price/buy_price-1)) %>%
@@ -379,14 +399,36 @@ table3 %>%
 ```
 
 
-## comparing performance  to Benchmark
+## Last week comparison: Portfolio vs Benchmark 
 *Note*: only for current holdings
 
-```{r}
-wts_e <- c(rep(1/length(colnames(log_ret_xts)),length(colnames(log_ret_xts))))
+```{r message=FALSE, warning=FALSE}
+log_ret_tidy1 <- price_data %>%
+  subset(date >  as.Date(now())- 7) %>%
+  group_by(symbol) %>%
+  tq_transmute(select = adjusted,
+               mutate_fun = periodReturn,
+               period = 'daily',
+               col_rename = 'ret',
+               type = 'log')
 
-portfolio_returns_e <- Return.portfolio(R = log_ret_xts, weights = wts_e, wealth.index = TRUE)
 
+#spread the data
+log_ret_xts1 <- log_ret_tidy1 %>%
+  spread(symbol, value = ret) %>%
+  tk_xts() %>% as.data.frame()
+
+spy <- log_ret_xts1 %>%
+  select(SPY)
+
+
+log_ret_xts1 <- log_ret_xts1 %>%
+  select(-'SPY')
+
+wts_e <- c(rep(1/length(colnames(log_ret_xts1)),length(colnames(log_ret_xts1))))
+
+
+portfolio_returns_e <- Return.portfolio(R = log_ret_xts1, weights = wts_e, wealth.index = TRUE)
 
 
 benchmark_returns <- Return.portfolio(R = spy , wealth.index = TRUE)
@@ -400,9 +442,6 @@ colnames(comp) <- c("Portfolio", "Benchmark")
 comp %>% 
 dygraph( main = "Portfolio Performance vs. Benchmark") %>%
   dyAxis("y", label = "Amount ($)")
-
-
-
 
 ```
 
