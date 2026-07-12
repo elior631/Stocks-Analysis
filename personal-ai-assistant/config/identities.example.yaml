@@ -1,0 +1,29 @@
+# דוגמה בלבד — העתק ל-identities.yaml. אין למלא כאן Tokens/Secrets, רק מזהים ומטא-דאטה.
+
+- id: company_a_google
+  workspace: company_a
+  email: "me@company-a.com"
+  provider: google
+  connection_ref: google_company_a   # מזהה לוגי; ה-OAuth/token עצמם נשמרים ב-secret manager
+  allowed_actions:
+    - tasks.read
+    - tasks.write
+
+- id: company_a_atlassian
+  workspace: company_a
+  email: "me@company-a.com"
+  provider: atlassian
+  connection_ref: jira_company_a
+  allowed_actions:
+    - jira.read
+    - jira.create
+    - jira.update
+
+- id: personal_google
+  workspace: personal
+  email: "me@gmail.com"
+  provider: google
+  connection_ref: google_personal
+  allowed_actions:
+    - tasks.read
+    - tasks.write

@@ -1,0 +1,23 @@
+# דוגמה בלבד — העתק ל-projects.yaml ומלא פרויקטים אמיתיים + כינויים אמיתיים.
+
+- id: mobile_app
+  workspace: company_a
+  aliases: ["האפליקציה", "מובייל", "האפליקציה של דנה"]
+  default_identity: company_a_google
+  jira:
+    site: "company-a.atlassian.net"
+    project_key: MOB
+    epic_required: true
+    default_issue_type: Task
+  google_tasks:
+    task_list_id: null   # יתמלא אחרי חיבור Google בשלב 4
+
+- id: asset_management
+  workspace: company_a
+  aliases: ["מערכת הנכסים", "AMS", "הדמו לאספן"]
+  default_identity: company_a_google
+  jira:
+    site: "company-a.atlassian.net"
+    project_key: DEV
+    epic_required: true
+    default_issue_type: Task

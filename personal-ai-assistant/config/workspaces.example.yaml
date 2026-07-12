@@ -1,0 +1,18 @@
+# דוגמה בלבד — העתק ל-workspaces.yaml ומלא את העולמות האמיתיים שלך.
+# type: company | independent_project | personal | family | reserve_duty
+
+- id: company_a
+  name: "Company A"
+  type: company
+  confidentiality_level: internal   # public | internal | confidential
+  telegram_allowed: true
+  default_timezone: Asia/Jerusalem
+  default_identity: company_a_google
+
+- id: personal
+  name: "אישי"
+  type: personal
+  confidentiality_level: internal
+  telegram_allowed: true
+  default_timezone: Asia/Jerusalem
+  default_identity: personal_google
